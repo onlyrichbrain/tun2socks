@@ -3,6 +3,7 @@ package engine
 import (
 	"errors"
 	"net"
+	"net/netip"
 	"os/exec"
 	"sync"
 	"time"
@@ -16,7 +17,6 @@ import (
 	"github.com/xjasonlyu/tun2socks/v2/core/device"
 	"github.com/xjasonlyu/tun2socks/v2/core/option"
 	"github.com/xjasonlyu/tun2socks/v2/dialer"
-	"github.com/xjasonlyu/tun2socks/v2/engine/mirror"
 	"github.com/xjasonlyu/tun2socks/v2/log"
 	"github.com/xjasonlyu/tun2socks/v2/proxy"
 	"github.com/xjasonlyu/tun2socks/v2/restapi"
@@ -130,7 +130,7 @@ func general(k *Key) error {
 		if k.UDPTimeout < time.Second {
 			return errors.New("invalid udp timeout value")
 		}
-		tunnel.SetUDPTimeout(k.UDPTimeout)
+		tunnel.T().SetUDPTimeout(k.UDPTimeout)
 	}
 	return nil
 }
@@ -192,13 +192,13 @@ func netstack(k *Key) (err error) {
 	if _defaultProxy, err = parseProxy(k.Proxy); err != nil {
 		return
 	}
-	proxy.SetDialer(_defaultProxy)
+	tunnel.T().SetDialer(_defaultProxy)
 
 	if _defaultDevice, err = parseDevice(k.Device, uint32(k.MTU)); err != nil {
 		return
 	}
 
-	var multicastGroups []net.IP
+	var multicastGroups []netip.Addr
 	if multicastGroups, err = parseMulticastGroups(k.MulticastGroups); err != nil {
 		return err
 	}
@@ -226,7 +226,7 @@ func netstack(k *Key) (err error) {
 
 	if _defaultStack, err = core.CreateStack(&core.Config{
 		LinkEndpoint:     _defaultDevice,
-		TransportHandler: &mirror.Tunnel{},
+		TransportHandler: tunnel.T(),
 		MulticastGroups:  multicastGroups,
 		Options:          opts,
 	}); err != nil {

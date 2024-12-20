@@ -4,7 +4,9 @@ import (
 	"encoding/base64"
 	"fmt"
 	"net"
+	"net/netip"
 	"net/url"
+	"runtime"
 	"strings"
 
 	"github.com/gorilla/schema"
@@ -66,7 +68,13 @@ func parseDevice(s string, mtu uint32) (device.Device, error) {
 }
 
 func parseFD(u *url.URL, mtu uint32) (device.Device, error) {
-	return fdbased.Open(u.Host, mtu, 0)
+	offset := 0
+	// fd offset in ios
+	// https://stackoverflow.com/questions/69260852/ios-network-extension-packet-parsing/69487795#69487795
+	if runtime.GOOS == "ios" {
+		offset = 4
+	}
+	return fdbased.Open(u.Host, mtu, offset)
 }
 
 func parseProxy(s string) (proxy.Proxy, error) {
@@ -178,20 +186,19 @@ func parseRelay(u *url.URL) (proxy.Proxy, error) {
 	return proxy.NewRelay(address, username, password, opts.NoDelay)
 }
 
-func parseMulticastGroups(s string) (multicastGroups []net.IP, _ error) {
-	ipStrings := strings.Split(s, ",")
-	for _, ipString := range ipStrings {
-		if strings.TrimSpace(ipString) == "" {
+func parseMulticastGroups(s string) (multicastGroups []netip.Addr, _ error) {
+	for _, ip := range strings.Split(s, ",") {
+		if ip = strings.TrimSpace(ip); ip == "" {
 			continue
 		}
-		ip := net.ParseIP(ipString)
-		if ip == nil {
-			return nil, fmt.Errorf("invalid IP format: %s", ipString)
+		addr, err := netip.ParseAddr(ip)
+		if err != nil {
+			return nil, err
 		}
-		if !ip.IsMulticast() {
-			return nil, fmt.Errorf("invalid multicast IP address: %s", ipString)
+		if !addr.IsMulticast() {
+			return nil, fmt.Errorf("invalid multicast IP: %s", addr)
 		}
-		multicastGroups = append(multicastGroups, ip)
+		multicastGroups = append(multicastGroups, addr)
 	}
 	return
 }
